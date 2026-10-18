@@ -1,5 +1,6 @@
 import datetime
 import json
+import os
 
 import aiosqlite
 
@@ -170,7 +171,17 @@ def now() -> str:
 
 async def init_db() -> None:
     global _conn
-    _conn = await aiosqlite.connect(DB_PATH)
+    # SQLite creates the file but not its folder - on a fresh container a
+    # DB_PATH like /data/bot.db fails with "unable to open database file".
+    db_dir = os.path.dirname(os.path.abspath(DB_PATH))
+    os.makedirs(db_dir, exist_ok=True)
+    try:
+        _conn = await aiosqlite.connect(DB_PATH)
+    except aiosqlite.OperationalError as exc:
+        raise RuntimeError(
+            f"Cannot open database at {os.path.abspath(DB_PATH)!r} (DB_PATH={DB_PATH!r}): {exc}. "
+            f"Check that the folder {db_dir!r} exists and is writable."
+        ) from exc
     _conn.row_factory = aiosqlite.Row
     await _conn.execute("PRAGMA journal_mode=WAL")
     await _conn.executescript(SCHEMA)
