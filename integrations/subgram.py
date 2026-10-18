@@ -54,7 +54,9 @@ async def get_tasks(
     for sponsor in sponsors:
         if not sponsor.get("available_now", True):
             continue
-        if sponsor.get("status") == "subscribed":
+        # already subscribed (now or from before the task) - can't earn a
+        # reward for it, so don't offer it as a task
+        if sponsor.get("status") in ("subscribed", "notgetted"):
             continue
         if not is_telegram_target(sponsor.get("type"), sponsor.get("resource_id"), sponsor.get("link")):
             continue
@@ -88,9 +90,9 @@ async def check_task(user_id: int, task: TaskItem) -> bool:
 
     sponsors = (data.get("additional") or {}).get("sponsors") or []
     logger.info("subgram check %s -> %s", task.external_id, [(s.get("resource_id"), s.get("status")) for s in sponsors])
-    # "notgetted" = user is already subscribed but wasn't counted for this
-    # link (was subscribed before); they did do the action, so accept it.
-    ok = ("subscribed", "subpin", "notgetted")
+    # "notgetted" = user was already subscribed before the task, so Subgram
+    # doesn't count (or pay for) it - neither do we.
+    ok = ("subscribed", "subpin")
     for sponsor in sponsors:
         if str(sponsor.get("resource_id")) == task.external_id:
             return sponsor.get("status") in ok

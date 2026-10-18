@@ -226,6 +226,17 @@ async def sponsor_create_channel(message: Message, state: FSMContext) -> None:
 @router.callback_query(F.data.startswith("asp:kind:"))
 async def sponsor_kind_chosen(callback: CallbackQuery, state: FSMContext) -> None:
     kind = callback.data.split(":")[2]
+    data = await state.get_data()
+    # The button may be on an older, abandoned creation message: without the
+    # earlier steps' data the last step would crash on data["name"].
+    if not all(data.get(k) for k in ("name", "url", "target_type")):
+        await state.clear()
+        await callback.answer("Создание спонсора устарело, начните заново.", show_alert=True)
+        return
+    if kind == "gate" and data["target_type"] == "channel" and not data.get("channel_id"):
+        # a gate channel without an id can't be checked and would be silently ignored
+        await callback.answer("Для обязательной подписки нужен ID канала.", show_alert=True)
+        return
     await state.update_data(kind=kind)
     if kind == "gate":
         await state.update_data(reward=0.0)
@@ -259,6 +270,10 @@ async def sponsor_create_click_goal(message: Message, state: FSMContext) -> None
         return
 
     data = await state.get_data()
+    if not all(data.get(k) for k in ("name", "url", "target_type")):
+        await state.clear()
+        await message.answer("❌ Создание спонсора устарело, начните заново.")
+        return
     await database.add_sponsor(
         data["name"],
         data["url"],
