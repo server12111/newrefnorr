@@ -169,17 +169,28 @@ def now() -> str:
     return datetime.datetime.utcnow().isoformat(timespec="seconds")
 
 
+def _resolve_db_path(raw: str) -> str:
+    """DB_PATH may name the database file or just a folder for it (hostings
+    often hand out a persistent volume like /app/data) - in the latter case
+    the database lives in that folder as bot.db."""
+    path = os.path.abspath(raw)
+    if os.path.isdir(path) or raw.endswith(("/", "\\")):
+        path = os.path.join(path, "bot.db")
+    return path
+
+
 async def init_db() -> None:
     global _conn
+    path = _resolve_db_path(DB_PATH)
     # SQLite creates the file but not its folder - on a fresh container a
     # DB_PATH like /data/bot.db fails with "unable to open database file".
-    db_dir = os.path.dirname(os.path.abspath(DB_PATH))
+    db_dir = os.path.dirname(path)
     os.makedirs(db_dir, exist_ok=True)
     try:
-        _conn = await aiosqlite.connect(DB_PATH)
+        _conn = await aiosqlite.connect(path)
     except aiosqlite.OperationalError as exc:
         raise RuntimeError(
-            f"Cannot open database at {os.path.abspath(DB_PATH)!r} (DB_PATH={DB_PATH!r}): {exc}. "
+            f"Cannot open database at {path!r} (DB_PATH={DB_PATH!r}): {exc}. "
             f"Check that the folder {db_dir!r} exists and is writable."
         ) from exc
     _conn.row_factory = aiosqlite.Row
